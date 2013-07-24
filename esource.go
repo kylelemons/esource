@@ -175,6 +175,18 @@ type startStream struct {
 	events  chan Event
 }
 
+// Tee delivers the events as they would go to a client.
+func (es *EventSource) Tee(startID int) ([]Event, chan Event) {
+	start := startStream{
+		startID: startID,
+		old:     make(chan []Event, 1),
+		events:  make(chan Event, BufferSize),
+	}
+
+	es.control <- start
+	return <-start.old, start.events
+}
+
 // ServeHTTP serves the client with events as they come in, and with any
 // stored events
 func (es *EventSource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -198,16 +210,10 @@ func (es *EventSource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		panic("esource: ServeHTTP called without a Flusher")
 	}
 
-	start := startStream{
-		startID: startID,
-		old:     make(chan []Event, 1),
-		events:  make(chan Event, BufferSize),
-	}
-
 	log.Printf("esource: [%s] starting stream", r.RemoteAddr)
 
-	es.control <- start
-	for _, event := range <-start.old {
+	old, events := es.Tee(startID)
+	for _, event := range old {
 		if _, err := event.WriteTo(w); err != nil {
 			log.Printf("esource: [%s] failed to write backlogged event %+v", r.RemoteAddr, event)
 			return
@@ -215,7 +221,7 @@ func (es *EventSource) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	flusher.Flush()
 
-	for event := range start.events {
+	for event := range events {
 		if _, err := event.WriteTo(w); err != nil {
 			log.Printf("esource: [%s] failed to write event %+v", r.RemoteAddr, event)
 			fmt.Fprintln(w, "\nretry: 0\n")
