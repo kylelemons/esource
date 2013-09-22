@@ -26,10 +26,10 @@ import (
 
 var (
 	// ContentType is sent as the content type for event source handlers
-	ContentType = "text/event-source;charset=utf-8"
+	ContentType = "text/event-stream;charset=utf-8"
 
 	// BufferSize is the number of events to buffer per connection before dropping
-	BufferSize = 16
+	BufferSize = 256
 
 	// DefaultBacklog is the default number of events to keep in memory
 	DefaultBacklog = 256
